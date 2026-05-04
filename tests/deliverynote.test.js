@@ -1,0 +1,279 @@
+import request from 'supertest';
+import app from '../src/app.js';
+import {
+  connectDb,
+  disconnectDb,
+  clearDb,
+  setupAdminWithCompany,
+  createSampleClient,
+  createSampleProject,
+} from './helpers.js';
+
+beforeAll(connectDb);
+afterAll(disconnectDb);
+afterEach(clearDb);
+
+const seed = async () => {
+  const admin = await setupAdminWithCompany(app);
+  const client = await createSampleClient(app, admin.accessToken);
+  const project = await createSampleProject(app, admin.accessToken, client._id);
+  return { admin, client, project };
+};
+
+describe('POST /api/deliverynote', () => {
+  it('crea un albarán de horas con varios trabajadores', async () => {
+    const { admin, client, project } = await seed();
+    const res = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        description: 'Trabajo en obra',
+        workers: [
+          { name: 'Pedro', hours: 4 },
+          { name: 'Ana', hours: 3 },
+        ],
+      })
+      .expect(201);
+    expect(res.body.deliveryNote.format).toBe('hours');
+    expect(res.body.deliveryNote.workers).toHaveLength(2);
+  });
+
+  it('crea un albarán de material', async () => {
+    const { admin, client, project } = await seed();
+    const res = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'material',
+        material: 'Cemento',
+        quantity: 10,
+        unit: 'sacos',
+      })
+      .expect(201);
+    expect(res.body.deliveryNote.material).toBe('Cemento');
+  });
+
+  it('rechaza horas sin total ni trabajadores (400)', async () => {
+    const { admin, client, project } = await seed();
+    await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+      })
+      .expect(400);
+  });
+
+  it('rechaza si cliente y proyecto no coinciden (400)', async () => {
+    const { admin, project } = await seed();
+    const otroCliente = await createSampleClient(app, admin.accessToken);
+    await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: otroCliente._id,
+        project: project._id,
+        format: 'hours',
+        hours: 5,
+      })
+      .expect(400);
+  });
+});
+
+describe('GET /api/deliverynote (filtros y paginación)', () => {
+  it('filtra por proyecto y formato', async () => {
+    const { admin, client, project } = await seed();
+    const otroProject = await createSampleProject(app, admin.accessToken, client._id);
+
+    const make = (project, format, body = {}) =>
+      request(app)
+        .post('/api/deliverynote')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .send({
+          client: client._id,
+          project,
+          format,
+          ...(format === 'hours' ? { hours: 8 } : { material: 'Pintura', quantity: 2 }),
+          ...body,
+        })
+        .expect(201);
+
+    await make(project._id, 'hours');
+    await make(project._id, 'material');
+    await make(otroProject._id, 'hours');
+
+    const byProject = await request(app)
+      .get(`/api/deliverynote?project=${project._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(byProject.body.totalItems).toBe(2);
+
+    const byFormat = await request(app)
+      .get('/api/deliverynote?format=material')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(byFormat.body.totalItems).toBe(1);
+  });
+});
+
+describe('GET /api/deliverynote/:id', () => {
+  it('devuelve el albarán con populate de cliente y proyecto', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 5,
+      })
+      .expect(201);
+
+    const res = await request(app)
+      .get(`/api/deliverynote/${created.body.deliveryNote._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(res.body.deliveryNote.client.name).toBeDefined();
+    expect(res.body.deliveryNote.project.name).toBeDefined();
+    expect(res.body.deliveryNote.user.email).toBeDefined();
+  });
+});
+
+describe('GET /api/deliverynote/pdf/:id', () => {
+  it('devuelve un PDF binario', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'material',
+        material: 'Arena',
+        quantity: 1,
+        unit: 't',
+      })
+      .expect(201);
+
+    const res = await request(app)
+      .get(`/api/deliverynote/pdf/${created.body.deliveryNote._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+    expect(res.body).toBeInstanceOf(Buffer);
+    expect(res.body.length).toBeGreaterThan(100);
+  });
+});
+
+describe('PATCH /api/deliverynote/:id/sign', () => {
+  it('firma un albarán y guarda la URL de la firma', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 6,
+      })
+      .expect(201);
+
+    // 1x1 PNG transparente
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    const res = await request(app)
+      .patch(`/api/deliverynote/${created.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(200);
+    expect(res.body.deliveryNote.signed).toBe(true);
+    expect(res.body.deliveryNote.signatureUrl).toBeDefined();
+  });
+
+  it('no permite firmar dos veces (409)', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 6,
+      })
+      .expect(201);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    await request(app)
+      .patch(`/api/deliverynote/${created.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(200);
+    await request(app)
+      .patch(`/api/deliverynote/${created.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(409);
+  });
+});
+
+describe('DELETE /api/deliverynote/:id', () => {
+  it('borra un albarán no firmado', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 4,
+      })
+      .expect(201);
+    await request(app)
+      .delete(`/api/deliverynote/${created.body.deliveryNote._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+  });
+
+  it('no permite borrar un albarán firmado (403)', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 4,
+      })
+      .expect(201);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    await request(app)
+      .patch(`/api/deliverynote/${created.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/deliverynote/${created.body.deliveryNote._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(403);
+  });
+});
