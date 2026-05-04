@@ -1,0 +1,279 @@
+### Variables (REST Client de VS Code)
+@host = http://localhost:3000
+@accessToken = pega_aqui_el_token
+
+###############################################################################
+# Health & docs
+###############################################################################
+
+### Health
+GET {{host}}/health
+
+### Swagger UI
+GET {{host}}/api-docs
+
+###############################################################################
+# Usuarios
+###############################################################################
+
+### Registro
+POST {{host}}/api/user/register
+Content-Type: application/json
+
+{
+  "email": "demo@bildyapp.test",
+  "password": "Password123"
+}
+
+### Validación de email
+PUT {{host}}/api/user/validation
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "code": "123456"
+}
+
+### Login
+POST {{host}}/api/user/login
+Content-Type: application/json
+
+{
+  "email": "demo@bildyapp.test",
+  "password": "Password123"
+}
+
+### Datos personales
+PUT {{host}}/api/user/register
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Demo",
+  "lastName": "Tester",
+  "nif": "12345678A"
+}
+
+### Crear / unirse a compañía
+PATCH {{host}}/api/user/company
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "isFreelance": false,
+  "name": "Empresa Demo SL",
+  "cif": "B98765432"
+}
+
+### Perfil
+GET {{host}}/api/user
+Authorization: Bearer {{accessToken}}
+
+### Renovar tokens
+POST {{host}}/api/user/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "pega_aqui_el_refresh"
+}
+
+### Logout
+POST {{host}}/api/user/logout
+Authorization: Bearer {{accessToken}}
+
+### Cambiar contraseña
+PUT {{host}}/api/user/password
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "currentPassword": "Password123",
+  "newPassword": "NuevaPwd456"
+}
+
+### Invitar colaborador
+POST {{host}}/api/user/invite
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "email": "invitado@bildyapp.test",
+  "name": "Pepa",
+  "lastName": "Invitada"
+}
+
+### Borrar usuario (soft)
+DELETE {{host}}/api/user?soft=true
+Authorization: Bearer {{accessToken}}
+
+###############################################################################
+# Clientes
+###############################################################################
+
+### Crear cliente
+POST {{host}}/api/client
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Construcciones García SL",
+  "cif": "B12345678",
+  "email": "info@garcia.com",
+  "phone": "910000000",
+  "address": {
+    "street": "Calle Mayor",
+    "number": "1",
+    "postal": "28013",
+    "city": "Madrid",
+    "province": "Madrid"
+  }
+}
+
+### Listar clientes
+GET {{host}}/api/client?page=1&limit=10&name=García&sort=-createdAt
+Authorization: Bearer {{accessToken}}
+
+### Obtener cliente
+GET {{host}}/api/client/CLIENT_ID
+Authorization: Bearer {{accessToken}}
+
+### Actualizar cliente
+PUT {{host}}/api/client/CLIENT_ID
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "phone": "911111111"
+}
+
+### Archivar cliente (soft)
+DELETE {{host}}/api/client/CLIENT_ID?soft=true
+Authorization: Bearer {{accessToken}}
+
+### Listar archivados
+GET {{host}}/api/client/archived
+Authorization: Bearer {{accessToken}}
+
+### Restaurar cliente
+PATCH {{host}}/api/client/CLIENT_ID/restore
+Authorization: Bearer {{accessToken}}
+
+### Borrar cliente (hard)
+DELETE {{host}}/api/client/CLIENT_ID
+Authorization: Bearer {{accessToken}}
+
+###############################################################################
+# Proyectos
+###############################################################################
+
+### Crear proyecto
+POST {{host}}/api/project
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Reforma calle Mayor",
+  "projectCode": "PRJ-2026-001",
+  "client": "CLIENT_ID",
+  "address": { "street": "Calle Mayor", "city": "Madrid" },
+  "notes": "Reforma integral"
+}
+
+### Listar proyectos
+GET {{host}}/api/project?page=1&limit=10&active=true&sort=-createdAt
+Authorization: Bearer {{accessToken}}
+
+### Obtener proyecto
+GET {{host}}/api/project/PROJECT_ID
+Authorization: Bearer {{accessToken}}
+
+### Actualizar proyecto
+PUT {{host}}/api/project/PROJECT_ID
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "active": false
+}
+
+### Archivar / restaurar
+DELETE {{host}}/api/project/PROJECT_ID?soft=true
+Authorization: Bearer {{accessToken}}
+
+###
+GET {{host}}/api/project/archived
+Authorization: Bearer {{accessToken}}
+
+###
+PATCH {{host}}/api/project/PROJECT_ID/restore
+Authorization: Bearer {{accessToken}}
+
+###############################################################################
+# Albaranes
+###############################################################################
+
+### Crear albarán de horas (varios trabajadores)
+POST {{host}}/api/deliverynote
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "client": "CLIENT_ID",
+  "project": "PROJECT_ID",
+  "format": "hours",
+  "description": "Trabajos en obra",
+  "workers": [
+    { "name": "Pedro Martínez", "hours": 4 },
+    { "name": "Ana Pérez", "hours": 3.5 }
+  ]
+}
+
+### Crear albarán de material
+POST {{host}}/api/deliverynote
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "client": "CLIENT_ID",
+  "project": "PROJECT_ID",
+  "format": "material",
+  "material": "Cemento Portland",
+  "quantity": 12,
+  "unit": "sacos"
+}
+
+### Listar albaranes
+GET {{host}}/api/deliverynote?page=1&limit=10&format=hours&signed=false&sort=-workDate
+Authorization: Bearer {{accessToken}}
+
+### Obtener albarán (populate)
+GET {{host}}/api/deliverynote/DELIVERY_ID
+Authorization: Bearer {{accessToken}}
+
+### Descargar PDF
+GET {{host}}/api/deliverynote/pdf/DELIVERY_ID
+Authorization: Bearer {{accessToken}}
+
+### Firmar albarán (form-data)
+PATCH {{host}}/api/deliverynote/DELIVERY_ID/sign
+Authorization: Bearer {{accessToken}}
+Content-Type: multipart/form-data; boundary=BildyAppBoundary
+
+--BildyAppBoundary
+Content-Disposition: form-data; name="signature"; filename="firma.png"
+Content-Type: image/png
+
+< ./uploads/firma.png
+--BildyAppBoundary--
+
+### Borrar albarán (no firmado)
+DELETE {{host}}/api/deliverynote/DELIVERY_ID
+Authorization: Bearer {{accessToken}}
+
+###############################################################################
+# Dashboard (bonus)
+###############################################################################
+
+### Estadísticas agregadas
+GET {{host}}/api/dashboard
+Authorization: Bearer {{accessToken}}
