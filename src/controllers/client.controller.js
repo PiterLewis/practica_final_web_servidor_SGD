@@ -125,6 +125,17 @@ export const restoreClient = async (req, res, next) => {
     const { id } = req.params;
     const client = await Client.findOne({ _id: id, company: req.user.company, deleted: true });
     if (!client) return next(AppError.notFound('Cliente archivado no encontrado'));
+
+    const conflict = await Client.findOne({ company: req.user.company, cif: client.cif });
+    if (conflict) {
+      return next(
+        AppError.conflict(
+          'Ya existe un cliente activo con ese CIF; no se puede restaurar',
+          'DUPLICATE_CLIENT'
+        )
+      );
+    }
+
     await client.restore();
     res.json({ message: 'Cliente restaurado', client });
   } catch (err) {

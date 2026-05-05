@@ -168,6 +168,31 @@ describe('GET / PUT / DELETE /api/client/:id', () => {
     expect(list.body.totalItems).toBe(0);
   });
 
+  it('rechaza restaurar si ya existe un cliente activo con ese CIF (409)', async () => {
+    const admin = await setupAdminWithCompany(app);
+    const a = await request(app)
+      .post('/api/client')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Original', cif: 'CONF-1' })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/client/${a.body.client._id}?soft=true`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .post('/api/client')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Nuevo', cif: 'CONF-1' })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/client/${a.body.client._id}/restore`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(409);
+  });
+
   it('devuelve 404 al obtener un cliente inexistente', async () => {
     const admin = await setupAdminWithCompany(app);
     await request(app)

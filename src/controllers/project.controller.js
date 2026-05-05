@@ -146,6 +146,20 @@ export const restoreProject = async (req, res, next) => {
     const { id } = req.params;
     const project = await Project.findOne({ _id: id, company: req.user.company, deleted: true });
     if (!project) return next(AppError.notFound('Proyecto archivado no encontrado'));
+
+    const conflict = await Project.findOne({
+      company: req.user.company,
+      projectCode: project.projectCode,
+    });
+    if (conflict) {
+      return next(
+        AppError.conflict(
+          'Ya existe un proyecto activo con ese código; no se puede restaurar',
+          'DUPLICATE_PROJECT_CODE'
+        )
+      );
+    }
+
     await project.restore();
     res.json({ message: 'Proyecto restaurado', project });
   } catch (err) {
