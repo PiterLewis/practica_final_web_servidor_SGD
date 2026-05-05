@@ -14,3 +14,8 @@ uploads/*.webp
 uploads/*.pdf
 .vscode/
 .idea/
+
+# Prisma
+prisma/migrations/
+src/generated/
+

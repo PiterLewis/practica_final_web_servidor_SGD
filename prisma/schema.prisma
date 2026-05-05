@@ -1,0 +1,215 @@
+// Esquema Prisma de BildyApp como capa complementaria a MongoDB
+// Para una migración futura a PostgreSQL (compatible con Supabase)
+//
+// Comandos habituales:
+//   npx prisma generate           Genera el cliente Prisma a node_modules/@prisma/client
+//   npx prisma db push            Sincroniza el esquema con la base de datos sin migración
+//   npx prisma migrate dev        Crea una migración en local
+//   npx prisma studio             UI para inspeccionar datos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  admin
+  guest
+}
+
+enum UserStatus {
+  pending
+  verified
+}
+
+enum DeliveryNoteFormat {
+  material
+  hours
+}
+
+model Address {
+  id       Int     @id @default(autoincrement())
+  street   String?
+  number   String?
+  postal   String?
+  city     String?
+  province String?
+
+  users     User[]
+  companies Company[]
+  clients   Client[]
+  projects  Project[]
+}
+
+model User {
+  id                   String     @id @default(cuid())
+  email                String     @unique
+  password             String
+  name                 String?
+  lastName             String?
+  nif                  String?
+  role                 UserRole   @default(admin)
+  status               UserStatus @default(pending)
+  verificationCode     String?
+  verificationAttempts Int        @default(3)
+  refreshToken         String?
+
+  addressId Int?
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  companyId String?
+  company   Company? @relation("CompanyMembers", fields: [companyId], references: [id])
+
+  ownedCompany   Company?        @relation("CompanyOwner")
+  clients        Client[]
+  projects       Project[]
+  deliveryNotes  DeliveryNote[]
+
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+  @@index([role])
+}
+
+model Company {
+  id          String  @id @default(cuid())
+  name        String
+  cif         String  @unique
+  logo        String?
+  isFreelance Boolean @default(false)
+
+  ownerId String @unique
+  owner   User   @relation("CompanyOwner", fields: [ownerId], references: [id])
+
+  addressId Int?
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  members        User[]         @relation("CompanyMembers")
+  clients        Client[]
+  projects       Project[]
+  deliveryNotes  DeliveryNote[]
+
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Client {
+  id    String  @id @default(cuid())
+  name  String
+  cif   String
+  email String?
+  phone String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  addressId Int?
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  projects       Project[]
+  deliveryNotes  DeliveryNote[]
+
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([companyId, cif, deleted])
+  @@index([companyId, name])
+}
+
+model Project {
+  id          String  @id @default(cuid())
+  name        String
+  projectCode String
+  email       String?
+  notes       String?
+  active      Boolean @default(true)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  addressId Int?
+  address   Address? @relation(fields: [addressId], references: [id])
+
+  deliveryNotes DeliveryNote[]
+
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([companyId, projectCode, deleted])
+  @@index([companyId, clientId])
+  @@index([companyId, active])
+}
+
+model DeliveryNoteWorker {
+  id    Int    @id @default(autoincrement())
+  name  String
+  hours Float
+
+  deliveryNoteId String
+  deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade)
+}
+
+model DeliveryNote {
+  id           String             @id @default(cuid())
+  format       DeliveryNoteFormat
+  description  String?
+  workDate     DateTime           @default(now())
+
+  material String?
+  quantity Float?
+  unit     String?
+  hours    Float?
+
+  signed       Boolean   @default(false)
+  signedAt     DateTime?
+  signatureUrl String?
+  pdfUrl       String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id])
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id])
+
+  workers DeliveryNoteWorker[]
+
+  deleted   Boolean   @default(false)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([companyId, projectId])
+  @@index([companyId, clientId])
+  @@index([companyId, signed])
+  @@index([companyId, workDate])
+}

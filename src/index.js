@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { config } from './config/index.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
+import { disconnectPrisma } from './config/prisma.js';
 import app from './app.js';
 import { initSocket, closeSocket } from './sockets/index.js';
 
@@ -44,6 +45,7 @@ const shutdown = async (signal) => {
     console.log('[server] Socket.IO cerrado');
     await disconnectDatabase();
     console.log('[db] MongoDB desconectado');
+    await disconnectPrisma();
     clearTimeout(timer);
     process.exit(0);
   } catch (err) {
