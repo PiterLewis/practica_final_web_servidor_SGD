@@ -144,6 +144,46 @@ socket.on('deliverynote:signed', console.log);
 
 Cada compañía tiene su propia room (`company:<id>`) y los eventos solo llegan a sus miembros.
 
+## Bonus
+
+### TypeScript (T12, +1 punto)
+
+El proyecto incorpora TypeScript como capa de tipos para todas las entidades del dominio:
+
+- `tsconfig.json` con `strict`, `NodeNext`, `noEmit: true`.
+- `src/types/entities.d.ts` define las interfaces `IUser`, `ICompany`, `IClient`, `IProject`, `IDeliveryNote` con sus enums (`UserRole`, `DeliveryNoteFormat`, etc.).
+- `src/types/express.d.ts` aumenta `Express.Request` para tipar `req.user` y `req.file`.
+- `src/types/socket.d.ts` describe los eventos emitidos por Socket.IO.
+- Script `npm run typecheck` ejecuta `tsc --noEmit` y se puede integrar en CI.
+
+```bash
+npm run typecheck
+```
+
+### PostgreSQL + Prisma (T9, +1 punto)
+
+El esquema relacional vive en `prisma/schema.prisma` y replica todo el dominio (User, Company, Client, Project, DeliveryNote y workers como tabla relacionada). Está pensado para Supabase, con `DATABASE_URL` (pooler 6543 con `pgbouncer=true`) y `DIRECT_URL` (5432) para migraciones.
+
+```bash
+# Generar el cliente Prisma
+npm run prisma:generate
+
+# Aplicar el schema en local (sin migración)
+npm run prisma:push
+
+# Crear migración con histórico
+npm run prisma:migrate
+
+# UI gráfica
+npm run prisma:studio
+```
+
+`src/config/prisma.js` expone un `getPrisma()` perezoso que solo se conecta si `DATABASE_URL` está definido — el resto de la API sigue funcionando con Mongoose, así que la capa Prisma es **complementaria**: lista para una migración futura sin romper lo existente. El `disconnectPrisma()` está integrado en el graceful shutdown.
+
+### Dashboard con aggregation (T5, +0,5 puntos)
+
+`GET /api/dashboard` expone tres pipelines: albaranes por mes (con totales y firmados), horas totales por proyecto (sumando `hours` y los workers), y materiales agregados por cliente.
+
 ## Licencia
 
 Uso académico (curso webII, IES SGD).
