@@ -110,4 +110,82 @@ describe('archivar y restaurar proyectos', () => {
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .expect(200);
   });
+
+  it('rechaza restaurar si ya hay un proyecto activo con ese código (409)', async () => {
+    const admin = await setupAdminWithCompany(app);
+    const client = await createSampleClient(app, admin.accessToken);
+
+    const orig = await request(app)
+      .post('/api/project')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Original', projectCode: 'CODE-1', client: client._id })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/project/${orig.body.project._id}?soft=true`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .post('/api/project')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Nuevo', projectCode: 'CODE-1', client: client._id })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/project/${orig.body.project._id}/restore`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(409);
+  });
+});
+
+describe('errores 404 en proyectos', () => {
+  it('get / update / delete devuelven 404 si el proyecto no existe', async () => {
+    const admin = await setupAdminWithCompany(app);
+    const fakeId = '507f1f77bcf86cd799439011';
+
+    await request(app)
+      .get(`/api/project/${fakeId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(404);
+
+    await request(app)
+      .put(`/api/project/${fakeId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'X' })
+      .expect(404);
+
+    await request(app)
+      .delete(`/api/project/${fakeId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(404);
+  });
+
+  it('update rechaza projectCode duplicado de otro proyecto y filtra por active', async () => {
+    const admin = await setupAdminWithCompany(app);
+    const client = await createSampleClient(app, admin.accessToken);
+    const a = await request(app)
+      .post('/api/project')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'A', projectCode: 'AA-1', client: client._id, active: true })
+      .expect(201);
+    await request(app)
+      .post('/api/project')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'B', projectCode: 'BB-1', client: client._id, active: false })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/project/${a.body.project._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ projectCode: 'BB-1' })
+      .expect(409);
+
+    const filtered = await request(app)
+      .get('/api/project?active=false&sort=name')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(filtered.body.totalItems).toBe(1);
+    expect(filtered.body.items[0].name).toBe('B');
+  });
 });

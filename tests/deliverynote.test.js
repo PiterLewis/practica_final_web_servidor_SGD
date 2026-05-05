@@ -147,6 +147,56 @@ describe('GET /api/deliverynote/:id', () => {
   });
 });
 
+describe('GET /api/deliverynote (filtros signed y rango de fechas)', () => {
+  it('filtra por signed y por rango from/to', async () => {
+    const { admin, client, project } = await seed();
+    const a = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 4,
+        workDate: '2025-01-15',
+      })
+      .expect(201);
+    await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 5,
+        workDate: '2025-06-15',
+      })
+      .expect(201);
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    await request(app)
+      .patch(`/api/deliverynote/${a.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(200);
+
+    const signed = await request(app)
+      .get('/api/deliverynote?signed=true')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(signed.body.totalItems).toBe(1);
+
+    const range = await request(app)
+      .get('/api/deliverynote?from=2025-01-01&to=2025-03-01')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(range.body.totalItems).toBe(1);
+  });
+});
+
 describe('GET /api/deliverynote/pdf/:id', () => {
   it('devuelve un PDF binario', async () => {
     const { admin, client, project } = await seed();
@@ -201,6 +251,37 @@ describe('PATCH /api/deliverynote/:id/sign', () => {
     expect(res.body.deliveryNote.signatureUrl).toBeDefined();
   });
 
+  it('rechaza firmar sin imagen (400)', async () => {
+    const { admin, client, project } = await seed();
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'hours',
+        hours: 6,
+      })
+      .expect(201);
+    await request(app)
+      .patch(`/api/deliverynote/${created.body.deliveryNote._id}/sign`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(400);
+  });
+
+  it('devuelve 404 al firmar un albarán inexistente', async () => {
+    const { admin } = await seed();
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64'
+    );
+    await request(app)
+      .patch('/api/deliverynote/507f1f77bcf86cd799439011/sign')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .attach('signature', png, { filename: 'firma.png', contentType: 'image/png' })
+      .expect(404);
+  });
+
   it('no permite firmar dos veces (409)', async () => {
     const { admin, client, project } = await seed();
     const created = await request(app)
@@ -247,6 +328,14 @@ describe('DELETE /api/deliverynote/:id', () => {
       .delete(`/api/deliverynote/${created.body.deliveryNote._id}`)
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .expect(200);
+  });
+
+  it('devuelve 404 al borrar un albarán inexistente', async () => {
+    const { admin } = await seed();
+    await request(app)
+      .delete('/api/deliverynote/507f1f77bcf86cd799439011')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(404);
   });
 
   it('no permite borrar un albarán firmado (403)', async () => {

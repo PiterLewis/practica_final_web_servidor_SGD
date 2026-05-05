@@ -208,4 +208,55 @@ describe('GET / PUT / DELETE /api/client/:id', () => {
       .set('Authorization', `Bearer ${admin.accessToken}`)
       .expect(400);
   });
+
+  it('update devuelve 404 si el cliente no existe', async () => {
+    const admin = await setupAdminWithCompany(app);
+    await request(app)
+      .put('/api/client/507f1f77bcf86cd799439011')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'Cualquiera' })
+      .expect(404);
+  });
+
+  it('update rechaza CIF duplicado de otro cliente (409)', async () => {
+    const admin = await setupAdminWithCompany(app);
+    const a = await request(app)
+      .post('/api/client')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'A', cif: 'CIF-A' })
+      .expect(201);
+    await request(app)
+      .post('/api/client')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ name: 'B', cif: 'CIF-B' })
+      .expect(201);
+
+    await request(app)
+      .put(`/api/client/${a.body.client._id}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ cif: 'CIF-B' })
+      .expect(409);
+  });
+
+  it('delete devuelve 404 si no existe; list con filtro cif y sort funciona', async () => {
+    const admin = await setupAdminWithCompany(app);
+    await request(app)
+      .delete('/api/client/507f1f77bcf86cd799439011')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(404);
+
+    for (const cif of ['ABC-1', 'ABC-2', 'XYZ-1']) {
+      await request(app)
+        .post('/api/client')
+        .set('Authorization', `Bearer ${admin.accessToken}`)
+        .send({ name: `Cli ${cif}`, cif })
+        .expect(201);
+    }
+    const res = await request(app)
+      .get('/api/client?cif=ABC&sort=-name')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(res.body.totalItems).toBe(2);
+    expect(res.body.items[0].name).toBe('Cli ABC-2');
+  });
 });
