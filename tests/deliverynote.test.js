@@ -221,6 +221,55 @@ describe('GET /api/deliverynote/pdf/:id', () => {
     expect(res.body).toBeInstanceOf(Buffer);
     expect(res.body.length).toBeGreaterThan(100);
   });
+
+  it('un guest no creador recibe 403 y el creador recibe 200', async () => {
+    const { admin, client, project } = await seed();
+
+    // El admin crea el albarán: él es el creador
+    const created = await request(app)
+      .post('/api/deliverynote')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({
+        client: client._id,
+        project: project._id,
+        format: 'material',
+        material: 'Cemento',
+        quantity: 5,
+        unit: 'sacos',
+      })
+      .expect(201);
+    const noteId = created.body.deliveryNote._id;
+
+    // El admin invita a un guest a su misma compañía
+    const invited = await request(app)
+      .post('/api/user/invite')
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .send({ email: 'guest_pdf@test.com', name: 'Guest', lastName: 'PDF' })
+      .expect(201);
+
+    // El guest hace login con la contraseña temporal del invite
+    const guestLogin = await request(app)
+      .post('/api/user/login')
+      .send({ email: 'guest_pdf@test.com', password: invited.body.tempPassword })
+      .expect(200);
+    const guestToken = guestLogin.body.accessToken;
+
+    // El guest no es el creador, debe recibir 403
+    const denied = await request(app)
+      .get(`/api/deliverynote/pdf/${noteId}`)
+      .set('Authorization', `Bearer ${guestToken}`)
+      .expect(403);
+    expect(denied.body.code).toBe('FORBIDDEN_PDF');
+
+    // El creador sí puede descargarlo
+    const ok = await request(app)
+      .get(`/api/deliverynote/pdf/${noteId}`)
+      .set('Authorization', `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(ok.headers['content-type']).toMatch(/application\/pdf/);
+    expect(ok.body).toBeInstanceOf(Buffer);
+    expect(ok.body.length).toBeGreaterThan(100);
+  });
 });
 
 describe('PATCH /api/deliverynote/:id/sign', () => {
