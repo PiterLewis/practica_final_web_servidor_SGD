@@ -118,6 +118,14 @@ export const downloadDeliveryNotePdf = async (req, res, next) => {
       .populate('company');
     if (!note) return next(AppError.notFound('Albarán no encontrado'));
 
+    // Un guest solo puede descargar los albaranes que ha creado él. Un admin
+    // puede descargar cualquiera de su compañía. note.user viene poblado y
+    // _id es ObjectId, por eso comparo con toString().
+    const creatorId = note.user?._id ?? note.user;
+    if (req.user.role === 'guest' && creatorId.toString() !== req.user._id.toString()) {
+      return next(AppError.forbidden('No tienes permiso para descargar este albarán', 'FORBIDDEN_PDF'));
+    }
+
     if (note.signed && note.pdfUrl) {
       return res.json({ pdfUrl: note.pdfUrl });
     }
